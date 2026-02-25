@@ -1,27 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clock</title>
-    <style>
-        body{
-            margin : 0;
-            background: transparent;
-            display:flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: monospace;
-            font-size: 50px;
-            color: #00ff00;
-            -webkit-app-region: drag;
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clock Widget</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    </style>
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: transparent;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      /* We handle drag-to-move manually to avoid platform edge resize quirks */
+      -webkit-app-region: no-drag;
+      cursor: grab;
+    }
+
+    body:active {
+      cursor: grabbing;
+    }
+  </style>
 </head>
 <body>
-    <div id="clock"></div>
-    <script src="renderer.js"></script>
+  <script src="renderer.js"></script>
 </body>
 </html>
