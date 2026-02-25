@@ -1,0 +1,4 @@
+node_modules/
+# Optional: also include jspm and typings
+jspm_packages/
+typings/
