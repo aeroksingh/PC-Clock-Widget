@@ -211,13 +211,33 @@ document.addEventListener('mousedown', (e) => {
   }
 });
 
+// Improved drag: accumulate deltas and flush once per animation frame for smoothness
+let pendingDx = 0;
+let pendingDy = 0;
+let dragFlushRequested = false;
+
+function flushDrag() {
+  if (!isDragging) { dragFlushRequested = false; pendingDx = 0; pendingDy = 0; return; }
+  if (pendingDx !== 0 || pendingDy !== 0) {
+    window.electronAPI?.moveWindow?.(pendingDx, pendingDy);
+    pendingDx = 0;
+    pendingDy = 0;
+  }
+  dragFlushRequested = false;
+}
+
 document.addEventListener('mousemove', (e) => {
   if (isDragging) {
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
-    window.electronAPI?.moveWindow?.(dx, dy);
+    pendingDx += dx;
+    pendingDy += dy;
     lastX = e.clientX;
     lastY = e.clientY;
+    if (!dragFlushRequested) {
+      dragFlushRequested = true;
+      requestAnimationFrame(flushDrag);
+    }
   }
 });
 
@@ -487,3 +507,129 @@ setupCanvas();
 canvas.style.display = 'block';
 window.addEventListener('resize', setupCanvas);
 requestAnimationFrame(animate);
+
+// ========== SIMPLE POMODORO CONTROL (floating button) ==========
+let focusRunning = false;
+let focusEndTs = 0;
+let focusInterval = null;
+
+const ctrl = document.createElement('button');
+ctrl.id = 'pomodoro-btn';
+Object.assign(ctrl.style, {
+  position: 'absolute',
+  right: '12px',
+  bottom: '12px',
+  padding: '8px 12px',
+  borderRadius: '10px',
+  background: 'rgba(0,0,0,0.6)',
+  color: '#00ffaa',
+  border: '1px solid rgba(255,255,255,0.06)',
+  backdropFilter: 'blur(6px)',
+  cursor: 'pointer',
+  zIndex: 9999,
+  fontWeight: '600',
+});
+ctrl.textContent = 'Start Focus';
+document.body.appendChild(ctrl);
+
+function updateCtrlText() {
+  if (!focusRunning) return (ctrl.textContent = 'Start Focus');
+  const remaining = Math.max(0, Math.floor((focusEndTs - Date.now()) / 1000));
+  const m = Math.floor(remaining / 60).toString().padStart(2, '0');
+  const s = (remaining % 60).toString().padStart(2, '0');
+  ctrl.textContent = `Focus ${m}:${s}`;
+}
+
+ctrl.addEventListener('click', async () => {
+  if (!focusRunning) {
+    // start 25m
+    await window.electronAPI?.focusStart?.(25);
+  } else {
+    // Stop the running focus session and show a bright summary with current time + remaining
+    await window.electronAPI?.focusStop?.();
+    // compute remaining time
+    const remaining = Math.max(0, Math.floor((focusEndTs - Date.now()) / 1000));
+    const m = Math.floor(remaining / 60).toString().padStart(2, '0');
+    const s = (remaining % 60).toString().padStart(2, '0');
+    // current local time
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    const nowStr = `${hh}:${mm}:${ss}`;
+    showToastBright(`${nowStr} • Remaining ${m}:${s}`);
+    // update local state immediately
+    focusRunning = false;
+    focusEndTs = 0;
+    if (focusInterval) { clearInterval(focusInterval); focusInterval = null; }
+    ctrl.textContent = 'Start Focus';
+  }
+});
+
+window.electronAPI?.onFocusStarted?.((data) => {
+  focusRunning = true;
+  focusEndTs = data?.endTs || (Date.now() + ((data?.durationMinutes || 25) * 60 * 1000));
+  updateCtrlText();
+  if (focusInterval) clearInterval(focusInterval);
+  focusInterval = setInterval(() => {
+    updateCtrlText();
+    if (Date.now() >= focusEndTs) {
+      clearInterval(focusInterval);
+      focusInterval = null;
+    }
+  }, 1000);
+});
+
+window.electronAPI?.onFocusStopped?.(() => {
+  focusRunning = false;
+  focusEndTs = 0;
+  if (focusInterval) { clearInterval(focusInterval); focusInterval = null; }
+  updateCtrlText();
+});
+
+window.electronAPI?.onFocusCompleted?.(() => {
+  focusRunning = false;
+  focusEndTs = 0;
+  if (focusInterval) { clearInterval(focusInterval); focusInterval = null; }
+  ctrl.textContent = 'Done';
+  setTimeout(() => { ctrl.textContent = 'Start Focus'; }, 2000);
+});
+
+// Small transient toast used to show remaining time on click
+const toast = document.createElement('div');
+Object.assign(toast.style, {
+  position: 'absolute',
+  right: '12px',
+  bottom: '60px',
+  padding: '8px 10px',
+  borderRadius: '8px',
+  background: 'rgba(0,0,0,0.75)',
+  color: '#fff',
+  fontWeight: '600',
+  zIndex: 10000,
+  opacity: '0',
+  transition: 'opacity 180ms ease',
+  pointerEvents: 'none',
+});
+document.body.appendChild(toast);
+
+function showToast(text, ms = 1800) {
+  toast.style.background = 'rgba(0,0,0,0.75)';
+  toast.style.color = '#fff';
+  toast.innerText = text;
+  toast.style.opacity = '1';
+  setTimeout(() => { toast.style.opacity = '0'; }, ms);
+}
+
+function showToastBright(text, ms = 2200) {
+  // bright accent toast (glass-like)
+  toast.style.background = 'linear-gradient(90deg,#6ef0c5,#3ddfaf)';
+  toast.style.color = '#022';
+  toast.style.boxShadow = '0 8px 30px rgba(61,223,175,0.18)';
+  toast.innerText = text;
+  toast.style.opacity = '1';
+  setTimeout(() => { toast.style.opacity = '0';
+    // restore default look after fade
+    setTimeout(() => { toast.style.background = 'rgba(0,0,0,0.75)'; toast.style.color = '#fff'; toast.style.boxShadow = 'none'; }, 300);
+  }, ms);
+}

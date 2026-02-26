@@ -30,4 +30,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onConfigLoaded: (callback) => {
         ipcRenderer.on('config-loaded', (event, config) => callback(config));
     },
+    // Focus / Pomodoro controls
+    focusStart: (minutes) => ipcRenderer.invoke('focus:start', { minutes }),
+    focusStop: () => ipcRenderer.invoke('focus:stop'),
+    onFocusStarted: (callback) => {
+        ipcRenderer.on('focus:started', (event, data) => callback(data));
+    },
+    onFocusStopped: (callback) => {
+        ipcRenderer.on('focus:stopped', () => callback());
+    },
+    onFocusCompleted: (callback) => {
+        ipcRenderer.on('focus:completed', () => callback());
+    },
 });

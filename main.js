@@ -1,10 +1,13 @@
-    const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage } = require('electron');
+    const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, screen } = require('electron');
     const path = require('path');
     const fs = require('fs');
+    const { exec } = require('child_process');
 
     let mainWindow;
     let tray;
     let isClickThrough = false;
+    let overlayWin = null;
+    let focusTimer = null;
 
     const configPath = path.join(app.getPath('userData'), 'clock-config.json');
     const CLOCK_SIZE = 300; // Fixed square size in pixels
@@ -15,8 +18,8 @@
 
     // Default config
     const defaultConfig = {
-    x: 100,
-    y: 100,
+    x: null,
+    y: null,
     isDarkTheme: true,
     isAnalog: true,
     showRomanNumerals: false,
@@ -39,6 +42,21 @@
     // Create window
     function createWindow() {
     const config = loadConfig();
+    // If no explicit start position, place the widget at top-right corner with a margin
+    try {
+        if (config.x == null || config.y == null) {
+        const primary = screen.getPrimaryDisplay();
+        const work = primary.workArea; // { x, y, width, height }
+        const margin = 20;
+        config.x = Math.max(work.x, work.x + work.width - CLOCK_SIZE - margin);
+        config.y = Math.max(work.y, work.y + margin);
+        saveConfig(config);
+        }
+    } catch (e) {
+        // fallback to defaults
+        if (config.x == null) config.x = 100;
+        if (config.y == null) config.y = 100;
+    }
 
     mainWindow = new BrowserWindow({
         width: CLOCK_SIZE,
@@ -75,11 +93,24 @@
         }
     };
 
-    mainWindow.on('resize', lockSize);
-    mainWindow.on('move', lockSize);
+    // mainWindow.on('resize', lockSize);
+    // mainWindow.on('move', lockSize);
     mainWindow.on('will-resize', (event) => {
         try { event.preventDefault(); } catch (e) {}
     });
+    mainWindow.on('moved', () => {
+  // Enforce size AFTER dragging ends (no lag)
+        const [w, h] = mainWindow.getSize();
+        if (w !== CLOCK_SIZE || h !== CLOCK_SIZE) {
+            mainWindow.setSize(CLOCK_SIZE, CLOCK_SIZE);
+        }
+
+        const [x, y] = mainWindow.getPosition();
+        const config = loadConfig();
+        config.x = x;
+        config.y = y;
+        saveConfig(config);
+});
 
     mainWindow.on('maximize', () => {
         try { mainWindow.unmaximize(); } catch (e) {}
@@ -152,6 +183,90 @@
     config.minimalistMode = !config.minimalistMode;
     saveConfig(config);
     return config.minimalistMode;
+    });
+
+    // Focus / Pomodoro: minimal overlay + DnD stub
+    function createOverlay() {
+    if (overlayWin) return;
+    overlayWin = new BrowserWindow({
+        show: false,
+        fullscreen: true,
+        frame: false,
+        transparent: true,
+        focusable: false,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        enableLargerThanScreen: true,
+        webPreferences: { nodeIntegration: false, contextIsolation: true }
+    });
+    overlayWin.setIgnoreMouseEvents(true, { forward: true });
+    overlayWin.loadURL(`data:text/html;charset=utf-8,<style>html,body{height:100%;margin:0;background:rgba(0,0,0,0.45);backdrop-filter: blur(4px);}</style><body></body>`);
+    }
+
+    function showOverlay(show) {
+    if (!overlayWin) createOverlay();
+    if (show) {
+        overlayWin.showInactive();
+        overlayWin.setAlwaysOnTop(true, 'screen-saver');
+    } else {
+        try { overlayWin.hide(); } catch (e) {}
+    }
+    }
+
+    async function setDoNotDisturb(enable) {
+    // Platform-specific DnD toggling is complex and may require native bindings.
+    // This is a safe stub that logs intent; replace with native implementation for production.
+    try {
+        if (process.platform === 'darwin') {
+        // macOS - consider using AppleScript or Focus APIs (left as an exercise)
+        console.log('Request macOS Do Not Disturb ->', enable);
+        } else if (process.platform === 'win32') {
+        console.log('Request Windows Focus Assist ->', enable);
+        } else {
+        console.log('Request Linux Do Not Disturb ->', enable);
+        }
+    } catch (e) {
+        console.warn('setDoNotDisturb error', e);
+    }
+    }
+
+    function clearFocusTimer() {
+    if (focusTimer) {
+        clearTimeout(focusTimer);
+        focusTimer = null;
+    }
+    }
+
+    function startFocusSession(durationMinutes = 25) {
+    clearFocusTimer();
+    showOverlay(true);
+    setDoNotDisturb(true);
+
+    const ms = (durationMinutes || 25) * 60 * 1000;
+    const endTs = Date.now() + ms;
+    focusTimer = setTimeout(() => {
+        stopFocusSession();
+        if (mainWindow) mainWindow.webContents.send('focus:completed');
+    }, ms);
+
+    if (mainWindow) mainWindow.webContents.send('focus:started', { durationMinutes, endTs });
+    }
+
+    function stopFocusSession() {
+    clearFocusTimer();
+    showOverlay(false);
+    setDoNotDisturb(false);
+    if (mainWindow) mainWindow.webContents.send('focus:stopped');
+    }
+
+    ipcMain.handle('focus:start', (event, opts) => {
+    startFocusSession(opts?.minutes || 25);
+    return { ok: true };
+    });
+
+    ipcMain.handle('focus:stop', () => {
+    stopFocusSession();
+    return { ok: true };
     });
 
     ipcMain.handle('move-window', (event, dx, dy) => {
