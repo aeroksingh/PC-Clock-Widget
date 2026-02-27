@@ -13,6 +13,7 @@ let lastX = 0;
 let lastY = 0;
 let isTransitioning = false;
 let transitionProgress = 0;
+let transitionDirection = 'none';
 let lastDigitalText = '';
 let lastContainerWidth = 0;
 let lastContainerHeight = 0;
@@ -59,6 +60,8 @@ Object.assign(canvas.style, {
   position: 'absolute',
   top: '0',
   left: '0',
+  transition: 'transform 260ms cubic-bezier(.22,.9,.32,1), opacity 220ms linear',
+  transformOrigin: 'center center',
 });
 
 // ========== SETUP DIGITAL DISPLAY ==========
@@ -68,13 +71,13 @@ Object.assign(digital.style, {
   color: '#00ffaa',
   textAlign: 'center',
   textShadow: '0 0 20px #00ffaa',
-  letterSpacing: '4px',
+  letterSpacing: '2px',
   whiteSpace: 'nowrap',
   position: 'absolute',
   top: '50%',
   left: '50%',
-  transform: 'translate(-50%, -50%)',
-  padding: '10px 18px',
+  transform: 'translate(-50%, -50%) scale(1)',
+  padding: '6px 14px',
   borderRadius: '999px',
   background: 'rgba(0,0,0,0.6)',
   backdropFilter: 'blur(6px)',
@@ -82,6 +85,8 @@ Object.assign(digital.style, {
   lineHeight: '1',
   minHeight: '36px',
   display: 'inline-block',
+  transition: 'transform 260ms cubic-bezier(.22,.9,.32,1), opacity 220ms linear',
+  transformOrigin: 'center center',
 });
 
 // ========== CONSTANTS & HELPERS ==========
@@ -99,6 +104,11 @@ function getDynamicColor() {
 function getSmoothedSeconds() {
   const now = Date.now();
   return (now / 1000) % 60;
+}
+
+// Easing for smooth transitions
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 // ========== CONFIGURATION LOADER ==========
@@ -120,6 +130,7 @@ document.addEventListener('keydown', async (e) => {
     isAnalog = !isAnalog;
     isTransitioning = true;
     transitionProgress = 0;
+    transitionDirection = isAnalog ? 'toAnalog' : 'toDigital';
     const result = await window.electronAPI?.toggleMode?.();
     if (result !== undefined) {
       config.isAnalog = result;
@@ -250,6 +261,7 @@ document.addEventListener('dblclick', async () => {
   isAnalog = !isAnalog;
   isTransitioning = true;
   transitionProgress = 0;
+  transitionDirection = isAnalog ? 'toAnalog' : 'toDigital';
   
   const result = await window.electronAPI?.toggleMode?.();
   if (result !== undefined) {
@@ -270,21 +282,28 @@ function updateTheme() {
 }
 
 // ========== CANVAS SETUP ==========
-function setupCanvas() {
+function setupCanvas(isAnalogFrame = isAnalog) {
   const rect = container.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  // Set canvas backing store size and reset transform to avoid cumulative scaling
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  // When showing analog, shrink the canvas frame to a fraction so the face is smaller
+  const sizeMultiplier = isAnalogFrame ? 0.6 : 1.0;
+  const targetW = Math.max(1, Math.floor(rect.width * sizeMultiplier));
+  const targetH = Math.max(1, Math.floor(rect.height * sizeMultiplier));
+
+  canvas.width = Math.max(1, Math.floor(targetW * dpr));
+  canvas.height = Math.max(1, Math.floor(targetH * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  canvas.style.width = rect.width + 'px';
-  canvas.style.height = rect.height + 'px';
+  // Center the canvas inside the container
+  canvas.style.width = targetW + 'px';
+  canvas.style.height = targetH + 'px';
+  canvas.style.left = `${(rect.width - targetW) / 2}px`;
+  canvas.style.top = `${(rect.height - targetH) / 2}px`;
 }
 
 // ========== DRAWING: ANALOG CLOCK ==========
 function drawAnalog() {
-  const rect = container.getBoundingClientRect();
+  const rect = { width: canvas.clientWidth, height: canvas.clientHeight };
   const centerX = rect.width / 2;
   const centerY = rect.height / 2;
   const radius = Math.min(rect.width, rect.height) / 2 * 0.9;
@@ -361,10 +380,27 @@ function drawAnalog() {
   }
   
   // Get time
-  const now = new Date();
-  const hours = now.getHours() % 12;
-  const minutes = now.getMinutes();
-  const seconds = getSmoothedSeconds();
+  // When focus running, show remaining time instead of real time
+  let now = new Date();
+  let hours = now.getHours() % 12;
+  let minutes = now.getMinutes();
+  let seconds = getSmoothedSeconds();
+  if (focusRunning && focusEndTs) {
+    const remainingMs = Math.max(0, focusEndTs - Date.now());
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    const remM = Math.floor(totalSeconds / 60);
+    const remS = totalSeconds % 60;
+    // Display remaining as centered text; keep hands at current time to avoid confusion
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.fillStyle = '#6ef0c5';
+    ctx.font = `bold ${Math.floor(radius * 0.35)}px 'Segoe UI', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const txt = `${String(remM).padStart(2,'0')}:${String(remS).padStart(2,'0')}`;
+    ctx.fillText(txt, 0, 0);
+    ctx.restore();
+  }
   
   // Hour hand
   const hourAngle = (hours * Math.PI / 6) + (minutes * Math.PI / (6 * 60)) + (seconds * Math.PI / (360 * 60));
@@ -403,23 +439,31 @@ function drawHand(angle, length, width, color) {
 
 // ========== DRAWING: DIGITAL CLOCK ==========
 function drawDigital() {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  
-  // If stopwatch mode active, show stopwatch elapsed
-  let text;
-  if (stopwatchMode) {
-    const elapsed = isStopwatchRunning ? (Date.now() - stopwatchStart) : stopwatchElapsed;
-    const totalMs = Math.max(0, elapsed);
-    const ms = Math.floor((totalMs % 1000) / 10); // hundredths
-    const totalSec = Math.floor(totalMs / 1000);
-    const s = totalSec % 60;
-    const m = Math.floor(totalSec / 60);
-    text = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(ms).padStart(2, '0')}`;
+  // If focus running, replace digital time with remaining countdown
+  let text = '';
+  if (focusRunning && focusEndTs) {
+    const remainingMs = Math.max(0, focusEndTs - Date.now());
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    const remM = Math.floor(totalSeconds / 60);
+    const remS = totalSeconds % 60;
+    text = `${String(remM).padStart(2,'0')}:${String(remS).padStart(2,'0')}`;
   } else {
-    text = `${hours}:${minutes}:${seconds}`;
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    // If stopwatch mode active, show stopwatch elapsed
+    if (stopwatchMode) {
+      const elapsed = isStopwatchRunning ? (Date.now() - stopwatchStart) : stopwatchElapsed;
+      const totalMs = Math.max(0, elapsed);
+      const ms = Math.floor((totalMs % 1000) / 10); // hundredths
+      const totalSec = Math.floor(totalMs / 1000);
+      const s = totalSec % 60;
+      const m = Math.floor(totalSec / 60);
+      text = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(ms).padStart(2, '0')}`;
+    } else {
+      text = `${hours}:${minutes}:${seconds}`;
+    }
   }
   digital.textContent = text;
 
@@ -458,17 +502,32 @@ function drawDigital() {
 
 // ========== SWAP DISPLAY MODE ==========
 function swapDisplay() {
+  // During transitions keep both elements present so we can animate smoothly
+  if (isTransitioning) {
+    if (!container.contains(canvas)) container.appendChild(canvas);
+    if (!container.contains(digital)) container.appendChild(digital);
+    // ensure canvas sized for analog; digital sizing handled separately
+    setupCanvas(true);
+    canvas.style.display = 'block';
+    digital.style.display = 'inline-block';
+    return;
+  }
+
   if (isAnalog) {
     if (!container.contains(canvas)) {
       container.appendChild(canvas);
     }
     canvas.style.display = 'block';
-    digital.remove?.();
+    // size and center analog frame
+    setupCanvas(true);
+    if (digital.parentElement) digital.remove();
   } else {
     if (!container.contains(digital)) {
       container.appendChild(digital);
     }
+    // digital uses full container, hide canvas
     canvas.style.display = 'none';
+    setupCanvas(false);
   }
 }
 
@@ -476,21 +535,60 @@ function swapDisplay() {
 function update() {
   // Handle transition animation
   if (isTransitioning) {
-    transitionProgress += 0.1;
+    transitionProgress += 0.08; // slightly smoother pacing
     if (transitionProgress >= 1) {
       isTransitioning = false;
       transitionProgress = 1;
     }
   }
-  
   swapDisplay();
-  
-  if (isAnalog) {
-    ctx.globalAlpha = 1 - (transitionProgress * 0.5);
+
+  const t = Math.min(1, Math.max(0, transitionProgress));
+  const eased = easeInOutCubic(t);
+
+  // Default scales/opacities
+  let canvasScale = 1;
+  let canvasOpacity = 1;
+  let digitalScale = 1;
+  let digitalOpacity = 1;
+
+  if (isTransitioning) {
+    if (transitionDirection === 'toDigital') {
+      // analog -> digital: shrink/fade analog, grow/appear digital
+      canvasScale = 1 - eased * 0.18; // down to ~0.82
+      canvasOpacity = 1 - eased * 0.9;
+      digitalScale = 0.9 + eased * 0.12; // from 0.9 -> 1.02
+      digitalOpacity = eased;
+    } else if (transitionDirection === 'toAnalog') {
+      // digital -> analog: grow analog, fade digital
+      canvasScale = 0.82 + eased * 0.18; // from 0.82 -> 1
+      canvasOpacity = eased;
+      digitalScale = 1 - eased * 0.12;
+      digitalOpacity = 1 - eased;
+    }
+  } else {
+    // static final states
+    if (isAnalog) {
+      canvasScale = 1; canvasOpacity = 1; digitalScale = 0.92; digitalOpacity = 0;
+    } else {
+      canvasScale = 0.82; canvasOpacity = 0; digitalScale = 1; digitalOpacity = 1;
+    }
+  }
+
+  // Apply transforms/styles
+  canvas.style.transform = `scale(${canvasScale})`;
+  canvas.style.opacity = String(canvasOpacity);
+  digital.style.transform = `translate(-50%, -50%) scale(${digitalScale})`;
+  digital.style.opacity = String(digitalOpacity);
+
+  // Draw whichever is visible (always draw analog when present so hands stay accurate)
+  if (canvas.style.display !== 'none' && canvasOpacity > 0.02) {
+    ctx.globalAlpha = canvasOpacity;
     drawAnalog();
     ctx.globalAlpha = 1;
-  } else {
-    digital.style.opacity = isTransitioning ? (1 - transitionProgress) : '1';
+  }
+
+  if (digitalOpacity > 0.01) {
     drawDigital();
   }
 }
@@ -505,7 +603,7 @@ function animate() {
 updateTheme();
 setupCanvas();
 canvas.style.display = 'block';
-window.addEventListener('resize', setupCanvas);
+window.addEventListener('resize', () => setupCanvas(isAnalog));
 requestAnimationFrame(animate);
 
 // ========== SIMPLE POMODORO CONTROL (floating button) ==========
@@ -517,10 +615,10 @@ const ctrl = document.createElement('button');
 ctrl.id = 'pomodoro-btn';
 Object.assign(ctrl.style, {
   position: 'absolute',
-  right: '12px',
-  bottom: '12px',
-  padding: '8px 12px',
-  borderRadius: '10px',
+  right: '8px',
+  bottom: '8px',
+  padding: '6px 10px',
+  borderRadius: '8px',
   background: 'rgba(0,0,0,0.6)',
   color: '#00ffaa',
   border: '1px solid rgba(255,255,255,0.06)',
@@ -528,6 +626,7 @@ Object.assign(ctrl.style, {
   cursor: 'pointer',
   zIndex: 9999,
   fontWeight: '600',
+  fontSize: '13px',
 });
 ctrl.textContent = 'Start Focus';
 document.body.appendChild(ctrl);
@@ -537,7 +636,8 @@ function updateCtrlText() {
   const remaining = Math.max(0, Math.floor((focusEndTs - Date.now()) / 1000));
   const m = Math.floor(remaining / 60).toString().padStart(2, '0');
   const s = (remaining % 60).toString().padStart(2, '0');
-  ctrl.textContent = `Focus ${m}:${s}`;
+  // Show remaining only (MM:SS)
+  ctrl.textContent = `${m}:${s}`;
 }
 
 ctrl.addEventListener('click', async () => {
