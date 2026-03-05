@@ -1,0 +1,15 @@
+{
+    "name": "Productivity Clock Dashboard",
+    "short_name": "ProdClock",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#121212",
+    "theme_color": "#bb86fc",
+    "icons": [
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/2838/2838779.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

@@ -616,7 +616,7 @@ ctrl.id = 'pomodoro-btn';
 Object.assign(ctrl.style, {
   position: 'absolute',
   right: '8px',
-  bottom: '8px',
+  bottom: '42px',
   padding: '6px 10px',
   borderRadius: '8px',
   background: 'rgba(0,0,0,0.6)',
@@ -700,7 +700,7 @@ const toast = document.createElement('div');
 Object.assign(toast.style, {
   position: 'absolute',
   right: '12px',
-  bottom: '60px',
+  bottom: '86px',
   padding: '8px 10px',
   borderRadius: '8px',
   background: 'rgba(0,0,0,0.75)',

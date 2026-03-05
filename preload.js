@@ -42,4 +42,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onFocusCompleted: (callback) => {
         ipcRenderer.on('focus:completed', () => callback());
     },
+    // Google Calendar
+    googleConnect: () => ipcRenderer.invoke('google:connect'),
+    googleDisconnect: () => ipcRenderer.invoke('google:disconnect'),
+    googleSyncNow: () => ipcRenderer.invoke('google:sync-now'),
+    googleGetStatus: () => ipcRenderer.invoke('google:get-status'),
+    googleSetSelectedCalendars: (ids) => ipcRenderer.invoke('google:set-selected-calendars', ids),
+    onCalendarEvents: (callback) => {
+        ipcRenderer.on('calendar:events', (event, data) => callback(data));
+    },
+    onCalendarReminder: (callback) => {
+        ipcRenderer.on('calendar:reminder', (event, data) => callback(data));
+    },
+    onCalendarStatus: (callback) => {
+        ipcRenderer.on('calendar:status', (event, data) => callback(data));
+    },
 });

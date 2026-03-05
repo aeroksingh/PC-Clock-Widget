@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Productivity Clock Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="dark-theme">
+    <div class="background-overlay"></div>
+    <div class="dashboard-container">
+        <!-- Floating settings button -->
+        <button id="settingsBtn" class="floating-btn"><i class="fas fa-cog"></i></button>
+
+        <!-- Top Section -->
+        <div class="top-section">
+            <!-- Clock + Date -->
+            <div class="clock-panel widget-card glass">
+                <div id="digitalClock" class="digital-clock">00:00:00</div>
+                <div id="currentDate" class="date-display">Date</div>
+            </div>
+
+            <!-- Daily Briefing -->
+            <div class="briefing-panel widget-card glass">
+                <h2 id="greetingMsg">Good Morning</h2>
+                <div class="briefing-stats">
+                    <p><i class="fas fa-tasks"></i> Tasks Pending: <span id="pendingTasksStat">0</span></p>
+                    <p><i class="fas fa-fire"></i> Habits Today: <span id="habitsTodayStat">0</span></p>
+                    <p><i class="fas fa-stopwatch"></i> <span id="focusReadyStat">Focus Timer Ready</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Section -->
+        <div class="middle-section">
+            <div class="column">
+                <!-- Productivity Analytics -->
+                <div class="analytics-panel widget-card glass">
+                    <h3><i class="fas fa-chart-line"></i> Analytics</h3>
+                    <div class="progress-bar-container">
+                        <span>Productivity Progress</span>
+                        <div class="progress-bar"><div id="productivityProgress" class="progress" style="width: 0%"></div></div>
+                    </div>
+                    <div class="stats-row">
+                        <div>Focus: <span id="focusTimeToday">0</span>m</div>
+                        <div>Tasks Done: <span id="tasksCompletedToday">0</span></div>
+                    </div>
+                </div>
+
+                <!-- Sticky Notes -->
+                <div class="notes-panel widget-card glass">
+                    <div class="header-row">
+                        <h3><i class="fas fa-sticky-note"></i> Sticky Notes</h3>
+                        <button id="addNoteBtn" class="icon-btn"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <div id="notesContainer" class="notes-container"></div>
+                </div>
+            </div>
+
+            <div class="column">
+                <!-- Todo Task List -->
+                <div class="todo-panel widget-card glass">
+                    <h3><i class="fas fa-check-square"></i> To-Do List</h3>
+                    <div class="input-row">
+                        <input type="text" id="taskInput" placeholder="Add a new task...">
+                        <button id="addTaskBtn" class="icon-btn"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <ul id="taskList" class="task-list"></ul>
+                </div>
+            </div>
+
+            <div class="column">
+                <!-- Habit Tracker -->
+                <div class="habit-panel widget-card glass">
+                    <h3><i class="fas fa-calendar-check"></i> Habit Tracker</h3>
+                    <div class="input-row">
+                        <input type="text" id="habitInput" placeholder="Add new habit...">
+                        <button id="addHabitBtn" class="icon-btn"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <ul id="habitList" class="habit-list"></ul>
+                </div>
+
+                <!-- Pomodoro Timer -->
+                <div class="pomodoro-panel widget-card glass">
+                    <h3><i class="fas fa-stopwatch"></i> Focus Timer</h3>
+                    <div class="timer-display" id="timerDisplay">25:00</div>
+                    <div class="timer-controls">
+                        <button id="timerStartBtn" class="primary-btn"><i class="fas fa-play"></i> Start</button>
+                        <button id="timerPauseBtn" class="secondary-btn"><i class="fas fa-pause"></i> Pause</button>
+                        <button id="timerResetBtn" class="secondary-btn"><i class="fas fa-redo"></i></button>
+                    </div>
+                    <p class="sessions-text">Sessions today: <span id="focusSessionsCounter">0</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content glass">
+            <span class="close-btn" id="closeSettings">&times;</span>
+            <h2>Settings</h2>
+            <div class="settings-group">
+                <label>Theme</label>
+                <select id="themeSelect">
+                    <option value="dark-theme">Dark</option>
+                    <option value="light-theme">Light</option>
+                </select>
+            </div>
+            <div class="settings-group">
+                <label>Font Style</label>
+                <select id="fontSelect">
+                    <option value="font-inter">Inter</option>
+                    <option value="font-roboto">Roboto</option>
+                    <option value="font-mono">Monospace</option>
+                </select>
+            </div>
+            <div class="settings-group">
+                <label><input type="checkbox" id="minimalModeToggle"> Minimal Mode</label>
+            </div>
+            <div class="settings-group">
+                <p><small>Shortcuts: CTRL+SHIFT+N (Note) | T (Task) | H (Habit) | F (Focus)</small></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+            .then(() => console.log('Service Worker Registered'));
+        }
+    </script>
+</body>
+</html>
